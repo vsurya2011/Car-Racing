@@ -14,6 +14,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 .box{background:var(--p);border:1px solid #2a3243;border-radius:14px;padding:18px;width:min(440px,100%);display:flex;flex-direction:column;gap:11px;max-height:100%;overflow:auto}
 h1{margin:0;font-size:34px;font-weight:700;letter-spacing:.5px;color:var(--a)}
 input,select,button{font:inherit;color:var(--t);background:#0e1116;border:1px solid #2f3a50;border-radius:10px;padding:11px 12px;min-width:0}
+input,select{user-select:text;-webkit-user-select:text;touch-action:manipulation}
 button{cursor:pointer;touch-action:manipulation}
 button.pri{background:var(--a);color:#1a1200;border-color:var(--a);font-weight:700}
 label{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--m)}
@@ -62,6 +63,7 @@ button:disabled{opacity:.45}
 
 <div id="lobby" class="scr"><div class="box">
 <div>Room <b id="rc"></b> &nbsp; Players <span id="cnt"></span></div>
+<div class="r2"><button id="cc">Copy code</button><button id="cl">Copy invite link</button></div>
 <div id="pl"></div>
 <label>Your car <select id="cs"></select></label>
 <label>Max players (2-12) <input id="mx" type="number" min="2" max="12"></label>
@@ -221,14 +223,14 @@ $('nm').value=localStorage.rn||'';const nm=()=>{const n=esc($('nm').value.trim()
 
 /* ---------- rooms ---------- */
 $('mk').onclick=async()=>{if(!uid)return toast('Signing in, try again');const c=Math.random().toString(36).slice(2,6).toUpperCase(),r=db.ref(`rooms/${c}/meta`);
- try{await r.set({host:uid,max:4,laps:3,track:0,state:'lobby'})}catch(e){return toast('Could not create room')}
+ try{await r.set({host:uid,max:4,laps:3,track:0,state:'lobby'})}catch(e){return toast('Could not create room: '+(e.code||e.message))}
  r.onDisconnect().remove();enter(c,true)};
-$('jn').onclick=async()=>{if(!uid)return toast('Signing in, try again');const c=$('jc').value.trim().toUpperCase(),s=await db.ref(`rooms/${c}/meta`).once('value');
- if(!s.exists())return toast('Room not found');if(s.val().state!=='lobby')return toast('Race already started');enter(c,false)};
+$('jn').onclick=async()=>{if(!uid)return toast('Signing in, try again');const c=$('jc').value.trim().toUpperCase();if(c.length!==4)return toast('Enter the 4-letter room code');
+ try{const s=await db.ref(`rooms/${c}/meta`).once('value');if(!s.exists())return toast('Room not found');if(s.val().state!=='lobby')return toast('Race already started');await enter(c,false)}catch(e){toast('Join failed: '+(e.code||e.message))}};
 async function enter(c,h){
  code=c;isHost=h;const pr=db.ref(`rooms/${c}/players/${uid}`);
  if(!h){const[ps,mx]=await Promise.all([db.ref(`rooms/${c}/players`).once('value'),db.ref(`rooms/${c}/meta/max`).once('value')]);if(ps.numChildren()>=mx.val())return toast('Room is full')}
- try{await pr.set({name:nm(),car:+$('cs').value})}catch(e){return toast('Could not join room')}
+ try{await pr.set({name:nm(),car:+$('cs').value})}catch(e){return toast('Could not join: '+(e.code||e.message))}
  pr.onDisconnect().remove();myPos=db.ref(`rooms/${c}/pos/${uid}`);myPos.onDisconnect().remove();
  const m=db.ref(`rooms/${c}/meta`),p=db.ref(`rooms/${c}/players`),q=db.ref(`rooms/${c}/pos`);refs=[m,p,q];
  m.on('value',s=>{meta=s.val();if(!meta)return leave('Host left, room closed');lobbyUI();
@@ -250,6 +252,10 @@ $('nx').onclick=()=>db.ref(`rooms/${code}/meta`).update({state:'lobby'});
 function leave(msg){refs.forEach(r=>r.off());refs=[];if(code){db.ref(`rooms/${code}/players/${uid}`).remove();myPos&&myPos.remove();if(isHost)db.ref(`rooms/${code}/meta`).remove()}
  clearScene();phase='menu';code=null;meta=null;$('hud').classList.remove('on');show('menu');msg&&toast(msg)}
 $('lv').onclick=$('lv2').onclick=()=>leave();
+function copy(t,m){const done=()=>toast(m);function fb(){const i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();i.setSelectionRange(0,99);try{document.execCommand('copy');done()}catch(e){toast('Code: '+t)}i.remove()}
+ if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,fb);else fb()}
+$('cc').onclick=()=>copy(code,'Code copied');$('cl').onclick=()=>copy(location.origin+location.pathname+'?room='+code,'Invite link copied');
+const qr=new URLSearchParams(location.search).get('room');if(qr)$('jc').value=qr.toUpperCase().slice(0,4);
 function clearScene(){if(mine){sc.remove(mine);mine=null}for(const k in rem)sc.remove(rem[k].g);rem={};me=null;if(gain)gain.gain.value=0}
 function toLobby(){clearScene();myPos&&myPos.remove();phase='lobby';$('hud').classList.remove('on');show('lobby')}
 
